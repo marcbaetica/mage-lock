@@ -33,6 +33,7 @@ get_unsigned(num)
 
 
 import json
+from pprint import pprint
 
 
 def get_creds():
@@ -46,22 +47,24 @@ def post_creds(creds):
         f.write(json.dumps(creds))
 
 
+def print_persistent_creds():
+    latest_creds = get_creds()
+    print('Uploaded creds:')
+    pprint(latest_creds)
+
+
 # creds = get_creds()
 
 creds = []
 creds.append({'user': 'user1', 'pass': 'lala1'})
 creds.append({'user': 'user2', 'pass': 'qwerty1'})
-# creds.append({'user': 'user3', 'pass': 'more_pass'})
-print(creds)
-
+creds.append({'user': 'user3', 'pass': 'more_pass'})
 post_creds(creds)
 
-new_creds = get_creds()
-print(new_creds)
+print_persistent_creds()
 
 creds.append({'user': 'user4', 'pass': 'abc123'})
-print(creds)
-
 post_creds(creds)
-print(get_creds())
+
+print_persistent_creds()
 
