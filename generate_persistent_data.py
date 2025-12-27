@@ -32,28 +32,8 @@ get_unsigned(num)
 
 
 
-import json
-from pprint import pprint
+from lib.storage_crud import get_creds, post_creds, print_persistent_creds
 
-
-def get_creds():
-    with open('store_tmp.json', 'r') as f:
-        data = f.readlines()[0].rstrip()
-    return json.loads(data)
-
-
-def post_creds(creds):
-    with open('store_tmp.json', 'w') as f:
-        f.write(json.dumps(creds))
-
-
-def print_persistent_creds():
-    latest_creds = get_creds()
-    print('Uploaded creds:')
-    pprint(latest_creds)
-
-
-# creds = get_creds()
 
 creds = []
 creds.append({'user': 'user1', 'pass': 'lala1'})
