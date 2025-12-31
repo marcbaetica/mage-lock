@@ -1,6 +1,8 @@
 import csv
 from pathlib import Path
 from pprint import pprint
+from ..lib.credentials_sdk import Credentials_SDK
+from ..lib.storage_crud import print_persistent_creds
 
 
 CWD = Path(__file__).resolve().parent
@@ -10,14 +12,11 @@ with open(DATA_START_FILE) as f:
     data = [line.rstrip() for line in f.readlines() if line.rstrip() != '']
     pprint(data)
 
+c_sdk = Credentials_SDK()
 data = csv.reader(data)
-# print(data)
-# pprint(list(data))
 
-while True:
-    try:
-        item = next(data)
-        print(type(item), item)
-    except StopIteration:
-        break
+for user, pwd in data:
+    c_sdk.store_creds(user, pwd)
+
+print_persistent_creds()
 
