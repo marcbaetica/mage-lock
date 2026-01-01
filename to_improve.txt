@@ -1,0 +1,464 @@
+Only reads the first line of the file
+
+creds = json.loads(f.readline().rstrip())
+
+This will break if:
+The JSON spans multiple lines
+The file accidentally gets formatted or pretty-printed
+
+Fix:
+creds = json.load(f)
+
+
+
+
+No error handling for corrupted JSON
+
+If the file exists but contains invalid JSON, your code will crash.
+
+Suggestion:
+Catch json.JSONDecodeError and recover gracefully.
+
+
+
+
+Overwriting credentials file is not atomic
+
+If your program crashes while writing, the file may be left empty or corrupted.
+
+Better approach:
+Write to a temp file
+Rename it after successful write (atomic on most OSes)
+
+
+
+
+6. Security concern (important)
+
+You’re:
+
+Printing credentials
+
+Storing credentials in plaintext
+
+At minimum:
+
+Do not print() or pprint() credentials
+
+Consider file permissions (chmod 600)
+
+Long-term: encrypt or use a proper secrets store
+
+7. flush_creds could confirm success more safely
+
+unlink(missing_ok=True) is fine, but checking existence afterward is redundant unless you handle errors.
+
+Improved version (safe + clean)
+import json
+from pathlib import Path
+from pprint import pprint
+from .constants import CREDS_DB_PATH
+
+
+class CredentialsSDK:
+    def get_creds(self) -> dict:
+        if not CREDS_DB_PATH.exists():
+            return {}
+
+        try:
+            with CREDS_DB_PATH.open("r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            # corrupted file → fail safely
+            return {}
+
+    def store_creds(self, new_credentials: dict) -> None:
+        curr_creds = self.get_creds()
+        curr_creds.update(new_credentials)
+
+        tmp_path = CREDS_DB_PATH.with_suffix(".tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
+            json.dump(curr_creds, f)
+
+        tmp_path.replace(CREDS_DB_PATH)
+
+    def flush_creds(self) -> None:
+        try:
+            CREDS_DB_PATH.unlink()
+        except FileNotFoundError:
+            pass
+
+Optional enhancements
+
+Use logging instead of print
+
+Add file locking if used by multiple processes
+
+Validate credential keys
+
+Add unit tests
+
+If you want:
+
+🔐 Secure credential storage
+
+🧪 Tests
+
+🧵 Thread-safe version
+
+📦 Turn this into a reusable package
+
+Just tell me what direction you want to go.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Got it — with those constants, the missing piece is a CSV seeding step that reads data_start.csv and initializes mock_db.json in the format your CredentialsSDK expects.
+
+Below is a clean, safe seeding utility that fits your structure and avoids printing secrets.
+
+Assumptions
+
+data_start.csv has a header: user,pass
+
+This is mock/test data
+
+Output format in mock_db.json is:
+
+{
+  "nebula_fox72": "X9f!Q2mL@7",
+  "pixel_river88": "aZ4#Kp1!Wq"
+}
+
+Seeder implementation
+import csv
+import json
+from pathlib import Path
+from .constants import CREDS_SEEDS_FILE_PATH, CREDS_DB_PATH
+
+
+def seed_creds_db(overwrite: bool = False) -> None:
+    if CREDS_DB_PATH.exists() and not overwrite:
+        # Prevent accidental overwrite
+        return
+
+    creds: dict[str, str] = {}
+
+    with CREDS_SEEDS_FILE_PATH.open("r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            user = row.get("user")
+            password = row.get("pass")
+
+            if user and password:
+                creds[user] = password
+
+    CREDS_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with CREDS_DB_PATH.open("w", encoding="utf-8") as f:
+        json.dump(creds, f)
+
+How to use it
+seed_creds_db(overwrite=True)
+
+
+overwrite=False → safe default
+
+overwrite=True → reinitialize from CSV
+
+Optional improvements (recommended)
+
+Hash passwords before storing
+
+Validate duplicate usernames
+
+Use file locking if accessed concurrently
+
+Delete seed file after first run (security hygiene)
+
+If you want, I can:
+
+🔁 Integrate this directly into CredentialsSDK
+
+🔐 Add password hashing
+
+🧪 Add pytest tests
+
+📦 Turn this into a CLI (python -m creds.seed)
+
+Just tell me.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Here’s a focused review + corrected version of your script. You’re very close; there are just a few real issues and some cleanups.
+
+Key issues
+1. You wipe the DB after populating it
+populate_storage_with_seeds(credentials_seeds, c_sdk)
+c_sdk.flush_creds()   # ← deletes everything you just wrote
+
+
+If this isn’t intentional, it’s a logic bug.
+flush_creds() should happen before seeding (or be optional).
+
+2. Unused imports
+from os import write   # unused
+
+
+Remove it.
+
+3. sys.path.append workaround
+
+You already noted this 👍
+For now it’s acceptable, but the correct solution is:
+
+python -m scripts.seed_db
+
+
+or a proper package structure. I’ll leave the workaround but mark it clearly.
+
+4. dict.update inside a loop
+
+This works, but it’s unnecessary and slightly noisy.
+
+Instead of:
+
+credentials_seeds.update({row['user']: row['pass']})
+
+
+Use:
+
+credentials_seeds[row['user']] = row['pass']
+
+5. Missing newline / encoding safety
+
+Always specify encoding when reading files.
+
+Corrected & cleaned-up version
+import csv
+import sys
+from pathlib import Path
+from pprint import pprint
+
+# TODO: Prefer `python -m` execution instead of sys.path hacks
+sys.path.append(str(Path(__file__).parent.parent))
+
+from lib.constants import CREDS_DB_PATH, CREDS_SEEDS_FILE_PATH
+from lib.credentials_sdk import Credentials_SDK
+
+
+def get_credentials_seeds_from_file() -> dict:
+    print(f'Extracting credentials from [{CREDS_SEEDS_FILE_PATH}].')
+    credentials_seeds: dict[str, str] = {}
+
+    with CREDS_SEEDS_FILE_PATH.open("r", encoding="utf-8") as csv_file:
+        rows = csv.DictReader(csv_file)
+        for row in rows:
+            credentials_seeds[row["user"]] = row["pass"]
+
+    return credentials_seeds
+
+
+def populate_storage_with_seeds(
+    credentials_seeds: dict,
+    c_sdk: Credentials_SDK
+) -> None:
+    c_sdk.store_creds(credentials_seeds)
+
+
+if __name__ == "__main__":
+    c_sdk = Credentials_SDK()
+
+    # Optional: start from a clean DB
+    c_sdk.flush_creds()
+
+    credentials_seeds = get_credentials_seeds_from_file()
+    print("Retrieved seed data:")
+    pprint(credentials_seeds)
+
+    populate_storage_with_seeds(credentials_seeds, c_sdk)
+
+Optional improvements (next steps)
+
+Remove all print / pprint of credentials
+
+Hash passwords before storage
+
+Add a --flush CLI flag
+
+Convert this into python -m lib.seed
+
+If you want, I can:
+
+Refactor this into a CLI command
+
+Make it idempotent
+
+Add password hashing
+
+Fix the package layout so sys.path isn’t needed
+
+Just tell me which direction you want.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Got it — let’s do a thorough bug / issue audit of all the code snippets you’ve shared so far. I’ll separate functional bugs, security concerns, and style/robustness issues.
+
+1️⃣ Bugs / Logical Errors
+a) flush_creds() is misused
+populate_storage_with_seeds(credentials_seeds, c_sdk)
+c_sdk.flush_creds()
+
+
+This erases all data immediately after writing it, making the seeding pointless.
+
+Fix: Only call flush_creds() before seeding if you want a fresh DB, or remove it entirely.
+
+b) Reading only the first line of JSON
+creds = json.loads(f.readline().rstrip())
+
+
+If mock_db.json is multi-line or pretty-printed, this fails.
+
+Fix: Use json.load(f) instead of json.loads(f.readline()).
+
+c) No error handling for corrupted JSON
+
+If mock_db.json exists but has invalid JSON, json.loads will crash the program.
+
+Fix: Catch json.JSONDecodeError and return {} safely.
+
+d) Potential KeyError / CSV issues
+credentials_seeds.update({row['user']: row['pass']})
+
+
+If the CSV is malformed or missing headers, it raises a KeyError.
+
+Fix: Use row.get("user") and row.get("pass") and skip invalid rows.
+
+e) File/Path issues
+
+CREDS_DB_PATH and CREDS_SEEDS_FILE_PATH assume directories exist.
+
+If the seeds folder or parent folders of mock_db.json don’t exist, open() or write() will crash.
+
+Fix: Use Path.mkdir(parents=True, exist_ok=True) before writing.
+
+f) Non-atomic writes
+with open(CREDS_DB_PATH, 'w') as f:
+    f.write(json.dumps(curr_creds))
+
+
+If the program crashes during write, the file can be left empty/corrupt.
+
+Fix: Write to a temp file and rename it after success.
+
+g) Unnecessary imports / mistakes
+from os import write  # unused
+
+
+Not harmful, but sloppy.
+
+h) Class naming / PEP8
+class Credentials_SDK:  # snake_case in class name
+
+
+Should be class CredentialsSDK:
+
+No functional bug, but a PEP8 style violation.
+
+i) sys.path.append workaround
+
+Works, but fragile — fails if run from unexpected working directory.
+
+Proper solution: use python -m with proper package structure.
+
+2️⃣ Security Issues (Important)
+
+Printing credentials in:
+
+pprint(creds)
+pprint(credentials_seeds)
+
+
+Storing plaintext passwords in mock_db.json
+
+Using CSV with plaintext credentials as seeds
+
+flush_creds() doesn’t securely delete data (just unlinks the file)
+
+3️⃣ Robustness / Style Issues
+
+Mixing print() and pprint() — could use logging instead.
+
+No type hints in some functions (except get_creds).
+
+No file locking — concurrent access could corrupt DB.
+
+No validation of duplicates or malformed inputs.
+
+store_creds blindly merges credentials without checking for overwrites.
+
+✅ Summary of Critical Bugs
+Category	Issue	Severity
+Logic	flush_creds() after storing seeds wipes DB	Critical
+Logic	Only reading first line of JSON	High
+Logic	No error handling for corrupted JSON	High
+Logic	KeyError possible from malformed CSV	Medium
+Logic	Writing to file not atomic	Medium
+Security	Printing / storing plaintext credentials	Critical
+Security	No password hashing	High
+Robustness	Assumes directories exist	Medium
+Style	Class naming / unused imports / print usage	Low
+
+If you want, I can make a fully corrected version of your whole workflow — CredentialsSDK + CSV seeding + safe writes + optional password hashing — that fixes all of the above bugs.
+
+Do you want me to do that?
+
+
+

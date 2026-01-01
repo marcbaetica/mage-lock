@@ -7,7 +7,7 @@ from pprint import pprint
 sys.path.append(str(Path(__file__).parent.parent))  # Workaround. 
 
 from lib.constants import CREDS_DB_PATH, CREDS_SEEDS_FILE_PATH
-from lib.credentials_sdk import Credentials_SDK
+from lib.credentials_sdk import CredentialsSDK
 
 
 def get_credentials_seeds_from_file():
@@ -20,15 +20,15 @@ def get_credentials_seeds_from_file():
         return credentials_seeds
 
 
-def populate_storage_with_seeds(credentials_seeds: dict, c_sdk: Credentials_SDK):
+def populate_storage_with_seeds(credentials_seeds: dict, c_sdk: CredentialsSDK):
     c_sdk.store_creds(credentials_seeds)
 
 
 
-c_sdk = Credentials_SDK()
+c_sdk = CredentialsSDK()
 credentials_seeds = get_credentials_seeds_from_file()
 print(f'Retrieved seed data:')
 pprint(credentials_seeds)
 populate_storage_with_seeds(credentials_seeds, c_sdk)
-print(c_sdk.get_creds())
+c_sdk.flush_creds()
 
